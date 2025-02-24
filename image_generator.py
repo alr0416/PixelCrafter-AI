@@ -23,7 +23,7 @@ load_dotenv()
 def open_minecraft():
     """Opens Minecraft Launcher on Windows."""
     try:
-        minecraft_path = r"C:\Program Files (x86)\Minecraft Launcher\MinecraftLauncher.exe"  # Default path
+        minecraft_path = os.getenv("MINECRAFT_LAUNCHER_PATH")  # Default path
         subprocess.Popen(minecraft_path)  # Open the launcher
     except Exception as e:
         print(f"Error opening Minecraft: {e}")
@@ -46,7 +46,7 @@ def create_function_directory():
         return
 
     # Define the function directory inside the world
-    function_directory = os.path.join(world_path, "datapacks", "ai", "data", "aibuild", "functions")
+    function_directory = os.path.join(world_path, "datapacks", "ai", "data", "aibuild", "function")
 
     # Define the pack.mcmeta file path
     pack_mcmeta_path = os.path.join(world_path, "datapacks", "ai", "pack.mcmeta")
@@ -86,6 +86,10 @@ def capture_input():
 
     # Disable "Generate Image" button while generating
     submit_button.config(state=tk.DISABLED)
+    image_label.config(image=None)
+    image_label.image = None  # Important: Remove reference to free memory
+    download_button.pack_forget()
+    proceed_button.pack_forget()
 
     # Show loading animation while generating the image
     response_field.config(text="Generating image...", fg="white")
@@ -165,7 +169,7 @@ def setup_gui():
 
     launch_button = tk.Button(root, text="Open Minecraft", command=open_minecraft)
     launch_button.pack(pady=20)
-    launch_button.config(state=tk.DISABLED)
+    launch_button.pack_forget()
 
 
     # Run the GUI
@@ -266,8 +270,7 @@ def proceed_with_conversion():
             response_field.config(text="Minecraft function file generated!\nUse /reload and /function build_structure in-game.", fg="green")
 
             # Add a button to open Minecraft
-            launch_button.config(state=tk.NORMAL)
-
+            launch_button.pack()
 
         else:
             response_field.config(text="Image processing failed.", fg="red")
@@ -480,7 +483,7 @@ def generate_mcfunction(block_grid):
     os.makedirs(MINECRAFT_FUNCTION_PATH, exist_ok=True)
 
     # Define the full file path for the .mcfunction file
-    mcfunction_file = os.path.join(MINECRAFT_FUNCTION_PATH, "build.mcfunction")
+    mcfunction_file = os.path.join(MINECRAFT_FUNCTION_PATH, "build_structure.mcfunction")
 
     try:
         commands = []
