@@ -8,6 +8,9 @@ from PIL import Image, ImageOps
 import numpy as np
 import tkinter as tk
 from PIL import Image, ImageTk
+import subprocess
+import os
+import json
 
 
 
@@ -15,7 +18,68 @@ from PIL import Image, ImageTk
 load_dotenv()
 
 
+
+
+def open_minecraft():
+    """Opens Minecraft Launcher on Windows."""
+    try:
+        minecraft_path = r"C:\Program Files (x86)\Minecraft Launcher\MinecraftLauncher.exe"  # Default path
+        subprocess.Popen(minecraft_path)  # Open the launcher
+    except Exception as e:
+        print(f"Error opening Minecraft: {e}")
+
+
+
+def create_function_directory():
+    """Gets the world save path from an environment variable, creates necessary subdirectories,
+    writes pack.mcmeta, and sets MINECRAFT_FUNCTION_PATH to the function directory.
+    """
+    # Get the full world path from an environment variable
+    world_path = os.getenv('MINECRAFT_WORLD_PATH')
+
+    if not world_path:
+        print("Error: MINECRAFT_WORLD_PATH environment variable is not set.")
+        return
+
+    if not os.path.exists(world_path):
+        print(f"Error: The specified world path does not exist: {world_path}")
+        return
+
+    # Define the function directory inside the world
+    function_directory = os.path.join(world_path, "datapacks", "ai", "data", "aibuild", "functions")
+
+    # Define the pack.mcmeta file path
+    pack_mcmeta_path = os.path.join(world_path, "datapacks", "ai", "pack.mcmeta")
+
+    # Create the necessary subdirectories
+    os.makedirs(function_directory, exist_ok=True)
+
+    # Create the pack.mcmeta file
+    pack_metadata = {
+        "pack": {
+            "pack_format": 61,
+            "description": "AI Build Datapack"
+        }
+    }
+
+    try:
+        with open(pack_mcmeta_path, "w") as f:
+            json.dump(pack_metadata, f, indent=4)
+        print(f"Created pack.mcmeta at: {pack_mcmeta_path}")
+
+    except Exception as e:
+        print(f"Error writing pack.mcmeta: {e}")
+        return
+
+    # Set environment variable for the function path
+    os.environ["MINECRAFT_FUNCTION_PATH"] = function_directory
+    print(f"Set MINECRAFT_FUNCTION_PATH to: {function_directory}")
+
+
+
+
 def capture_input():
+
     """Handles the image generation process when the user submits a prompt."""
     user_input = entry.get()
     print(f"User Input: {user_input}")
@@ -46,7 +110,9 @@ def start_loading_animation():
 
 def setup_gui():
     """Sets up the graphical user interface (GUI) for the AI image generator."""
-    global root, image_label, response_field, download_button, proceed_button, submit_button, entry
+    global root, image_label, response_field, download_button, proceed_button, submit_button, entry, launch_button
+
+
 
     root = tk.Tk()
     root.title("AI Image Generator")
@@ -97,6 +163,11 @@ def setup_gui():
     download_button.pack(pady=10)
     download_button.pack_forget()
 
+    launch_button = tk.Button(root, text="Open Minecraft", command=open_minecraft)
+    launch_button.pack(pady=20)
+    launch_button.config(state=tk.DISABLED)
+
+
     # Run the GUI
     root.mainloop()
 
@@ -121,11 +192,16 @@ def generate_image(user_input):
         # Display the generated image
         display_image_from_url(image_url)
 
+        submit_button.config(state=tk.NORMAL)
+
+
     except Exception as e:
         loading = False
         error_message = f"Error generating image: {e}"
         print(error_message)
         response_field.config(text=error_message, fg="red")
+        submit_button.config(state=tk.NORMAL)
+
 
 def display_image_from_url(image_url):
     """Displays an image in the GUI from a URL (without downloading)."""
@@ -161,6 +237,9 @@ def display_image_from_url(image_url):
 def proceed_with_conversion():
     """Downloads the generated image into the project folder before processing it."""
     image_url = getattr(download_button, "image_url", None)
+
+
+
     if not image_url:
         response_field.config(text="No image to process!", fg="red")
         return
@@ -179,12 +258,17 @@ def proceed_with_conversion():
 
         # Process image for Minecraft conversion
         pixels = process_image(save_path)
-        print(pixels.shape)
+
 
         if pixels is not None:
             block_grid = convert_pixels_to_blocks(pixels)
             generate_mcfunction(block_grid)
             response_field.config(text="Minecraft function file generated!\nUse /reload and /function build_structure in-game.", fg="green")
+
+            # Add a button to open Minecraft
+            launch_button.config(state=tk.NORMAL)
+
+
         else:
             response_field.config(text="Image processing failed.", fg="red")
 
@@ -388,6 +472,16 @@ def generate_mcfunction(block_grid):
     """Generates an .mcfunction file for a vertical image that appears a few blocks in front of the player."""
     MINECRAFT_FUNCTION_PATH = os.getenv("MINECRAFT_FUNCTION_PATH")
 
+    if not MINECRAFT_FUNCTION_PATH:
+        print("Error: MINECRAFT_FUNCTION_PATH is not set.")
+        return
+
+    # Ensure the functions directory exists
+    os.makedirs(MINECRAFT_FUNCTION_PATH, exist_ok=True)
+
+    # Define the full file path for the .mcfunction file
+    mcfunction_file = os.path.join(MINECRAFT_FUNCTION_PATH, "build.mcfunction")
+
     try:
         commands = []
         height = len(block_grid)
@@ -398,10 +492,10 @@ def generate_mcfunction(block_grid):
                 commands.append(f"setblock ~3 ~{height - y} ~{x} minecraft:{block}")  # Flip Y positioning
 
         # Write to the .mcfunction file
-        with open(MINECRAFT_FUNCTION_PATH, "w") as f:
+        with open(mcfunction_file, "w") as f:
             f.write("\n".join(commands))
 
-        print(f".mcfunction file saved to: {MINECRAFT_FUNCTION_PATH}")
+        print(f".mcfunction file saved to: {mcfunction_file}")
 
     except Exception as e:
         print(f"Error writing .mcfunction file: {e}")
@@ -414,10 +508,11 @@ def generate_mcfunction(block_grid):
 
 
 
-
-
 def main():
     """Main function to generate, process, and convert the image into a Minecraft build."""
+
+
+    create_function_directory()
     setup_gui()
 
 
