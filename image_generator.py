@@ -1,4 +1,6 @@
 import os
+import threading
+import time
 import requests
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -13,21 +15,37 @@ from PIL import Image, ImageTk
 load_dotenv()
 
 
-
 def capture_input():
+    """Handles the image generation process when the user submits a prompt."""
     user_input = entry.get()
-    print(f"User Input: {user_input}")  # Captures and prints the input string
+    print(f"User Input: {user_input}")
 
-    image_path = generate_image(user_input)
+    # Disable "Generate Image" button while generating
+    submit_button.config(state=tk.DISABLED)
 
-    if image_path:
-        # Don't process image yet, wait for user confirmation
-        show_confirmation_buttons()
+    # Show loading animation while generating the image
+    response_field.config(text="Generating image...", fg="white")
+    start_loading_animation()
 
+    # Run image generation in a separate thread to keep the UI responsive
+    threading.Thread(target=generate_image, args=(user_input,), daemon=True).start()
 
+def start_loading_animation():
+    """Displays an animated '...' while the image is being generated."""
+    def animate():
+        dots = ["", ".", "..", "..."]
+        i = 0
+        while loading:
+            response_field.config(text=f"Generating image{dots[i]}", fg="white")
+            i = (i + 1) % len(dots)
+            time.sleep(0.5)
+
+    global loading
+    loading = True
+    threading.Thread(target=animate, daemon=True).start()
 
 def setup_gui():
-    global root, image_label, response_field, download_button, regenerate_button, proceed_button
+    global root, image_label, response_field, download_button, proceed_button, submit_button, entry
 
     root = tk.Tk()
     root.title("AI Image Generator")
@@ -45,7 +63,6 @@ def setup_gui():
     label.pack(pady=10)
 
     # Textbox (Entry Widget)
-    global entry
     entry = tk.Entry(root, width=70, font=("Arial", 14))
     entry.pack(pady=10, ipady=8)
 
@@ -68,11 +85,6 @@ def setup_gui():
     # Confirmation Buttons (Initially Hidden)
     button_style = {"font": ("Arial", 14, "bold"), "padx": 25, "pady": 10, "borderwidth": 3, "relief": "ridge"}
 
-    regenerate_button = tk.Button(root, text="Regenerate", bg="red", fg="white",
-                                  command=capture_input, **button_style)
-    regenerate_button.pack(pady=10)
-    regenerate_button.pack_forget()
-
     proceed_button = tk.Button(root, text="Proceed", bg="green", fg="white",
                                command=proceed_with_conversion, **button_style)
     proceed_button.pack(pady=10)
@@ -87,9 +99,9 @@ def setup_gui():
     # Run the GUI
     root.mainloop()
 
-
-def generate_image(user_input, save_path="ai_image.png"):
-    """Generates an image using OpenAI's DALL·E, downloads it, and returns the file path."""
+def generate_image(user_input):
+    """Generates an image using OpenAI's DALL·E and displays it, but does NOT download."""
+    global loading
     client = OpenAI(api_key=os.getenv("KEY"))
 
     try:
@@ -103,60 +115,48 @@ def generate_image(user_input, save_path="ai_image.png"):
         image_url = response.data[0].url
         print(f"Image generated: {image_url}")
 
-        # Download and save the image
-        response = requests.get(image_url)
-        response.raise_for_status()
+        loading = False  # Stop the loading animation
 
-        with open(save_path, "wb") as f:
-            f.write(response.content)
-
-        print(f"Image saved to: {save_path}")
-
-        # Display image in GUI
-        display_image(save_path)
-
-        return save_path  # Return the saved file path
+        # Display the generated image
+        display_image_from_url(image_url)
 
     except Exception as e:
-        error_message = f"Error generating or downloading image: {e}"
+        loading = False
+        error_message = f"Error generating image: {e}"
         print(error_message)
-
-        # Update response field with error
         response_field.config(text=error_message, fg="red")
 
-        return None
-
-
-def display_image(image_path):
-    """Displays the generated image in the GUI."""
+def display_image_from_url(image_url):
+    """Displays an image in the GUI from a URL (without downloading)."""
     try:
-        img = Image.open(image_path)
-        img.thumbnail((300, 300))  # Resize for display
+        response = requests.get(image_url, stream=True)
+        response.raise_for_status()
+        img = Image.open(response.raw)
+        img.thumbnail((300, 300))
         img_tk = ImageTk.PhotoImage(img)
 
         # Update image label
         image_label.config(image=img_tk)
-        image_label.image = img_tk  # Keep reference to avoid garbage collection
+        image_label.image = img_tk
 
-        # Hide error message if an image is successfully displayed
-        response_field.config(text="Do you want to regenerate or proceed?", fg="white")
+        # Re-enable "Generate Image" button after image is generated
+        submit_button.config(state=tk.NORMAL)
 
-        # Show confirmation buttons
-        regenerate_button.pack()
+        # Show user options after displaying the image
+        response_field.config(text="Do you want to proceed?", fg="white")
+
+        # Enable and show Proceed + Download buttons
+        proceed_button.config(state=tk.NORMAL)
+        download_button.config(state=tk.NORMAL)
         proceed_button.pack()
-
-        # Show download button
         download_button.pack()
+
+        # Store image URL for later download
+        download_button.image_url = image_url
 
     except Exception as e:
         print(f"Error displaying image: {e}")
-
-
-def show_confirmation_buttons():
-    """Displays the Regenerate and Proceed buttons after image generation."""
-    regenerate_button.pack()
-    proceed_button.pack()
-
+        response_field.config(text="Failed to display image.", fg="red")
 
 def proceed_with_conversion():
     """Proceeds with converting the image into Minecraft blocks."""
@@ -165,6 +165,10 @@ def proceed_with_conversion():
 
     if pixels is not None:
         print(f"Image processed with shape: {pixels.shape}")
+
+        # **Disable buttons after proceeding**
+        proceed_button.config(state=tk.DISABLED)
+        download_button.config(state=tk.DISABLED)
 
         # Convert pixels to Minecraft blocks
         block_grid = convert_pixels_to_blocks(pixels)
@@ -177,6 +181,29 @@ def proceed_with_conversion():
     else:
         response_field.config(text="Image processing failed.", fg="red")
 
+def download_image():
+    """Downloads the generated image when the user clicks the download button."""
+    image_url = getattr(download_button, "image_url", None)
+    if not image_url:
+        response_field.config(text="No image to download!", fg="red")
+        return
+
+    try:
+        response = requests.get(image_url)
+        response.raise_for_status()
+
+        save_path = "ai_image.png"
+        with open(save_path, "wb") as f:
+            f.write(response.content)
+
+        response_field.config(text="Image downloaded successfully!", fg="green")
+        print(f"Image saved to: {save_path}")
+
+        # **Disable download button after clicking**
+        download_button.config(state=tk.DISABLED)
+
+    except Exception as e:
+        response_field.config(text=f"Error downloading image: {e}", fg="red")
 
 def process_image(image_path, size=(256, 256)):
     """Resizes and converts an image to an RGB pixel array."""
@@ -188,17 +215,6 @@ def process_image(image_path, size=(256, 256)):
     except Exception as e:
         print(f"Error processing image: {e}")
         return None
-
-
-def download_image():
-    """Allows the user to download the image."""
-    os.system(f"start {os.path.abspath('ai_image.png')}" if os.name == "nt" else f"open {os.path.abspath('ai_image.png')}")
-
-
-
-
-
-
 
 
 
@@ -222,25 +238,96 @@ def closest_minecraft_block(rgb):
 
     # Define Minecraft block colors (RGB values)
     MINECRAFT_BLOCKS = {
+        # Wool Blocks
         "white_wool": (255, 255, 255),
-        "black_wool": (0, 0, 0),
-        "red_wool": (255, 0, 0),
-        "green_wool": (0, 255, 0),
-        "blue_wool": (0, 0, 255),
-        "yellow_wool": (255, 255, 0),
-        "orange_wool": (255, 165, 0),
         "light_gray_wool": (200, 200, 200),
         "gray_wool": (100, 100, 100),
-        "brown_wool": (139, 69, 19),
+        "black_wool": (0, 0, 0),
+        "red_wool": (255, 0, 0),
+        "orange_wool": (255, 165, 0),
+        "yellow_wool": (255, 255, 0),
+        "lime_wool": (191, 255, 0),
+        "green_wool": (0, 255, 0),
         "cyan_wool": (0, 255, 255),
+        "light_blue_wool": (173, 216, 230),
+        "blue_wool": (0, 0, 255),
         "purple_wool": (128, 0, 128),
-        "sandstone": (237, 201, 175),
-        "stone": (125, 125, 125),
-        "grass_block": (127, 178, 56),
-        "water": (64, 64, 255),
-        "lava": (255, 69, 0),
-    }
+        "magenta_wool": (255, 0, 255),
+        "pink_wool": (255, 182, 193),
+        "brown_wool": (139, 69, 19),
 
+        # Concrete Blocks
+        "white_concrete": (207, 213, 214),
+        "light_gray_concrete": (125, 125, 115),
+        "gray_concrete": (55, 55, 55),
+        "black_concrete": (10, 10, 10),
+        "red_concrete": (142, 32, 32),
+        "orange_concrete": (224, 97, 0),
+        "yellow_concrete": (247, 213, 0),
+        "lime_concrete": (127, 204, 25),
+        "green_concrete": (102, 127, 51),
+        "cyan_concrete": (21, 137, 145),
+        "light_blue_concrete": (74, 181, 214),
+        "blue_concrete": (37, 49, 146),
+        "purple_concrete": (100, 31, 156),
+        "magenta_concrete": (169, 48, 159),
+        "pink_concrete": (214, 101, 143),
+        "brown_concrete": (96, 60, 32),
+
+        # Terracotta Blocks
+        "white_terracotta": (209, 178, 161),
+        "light_gray_terracotta": (135, 107, 98),
+        "gray_terracotta": (85, 61, 54),
+        "black_terracotta": (37, 23, 16),
+        "red_terracotta": (143, 33, 33),
+        "orange_terracotta": (162, 84, 38),
+        "yellow_terracotta": (186, 133, 35),
+        "lime_terracotta": (103, 117, 52),
+        "green_terracotta": (76, 83, 42),
+        "cyan_terracotta": (76, 89, 91),
+        "light_blue_terracotta": (113, 108, 137),
+        "blue_terracotta": (74, 59, 91),
+        "purple_terracotta": (118, 70, 86),
+        "magenta_terracotta": (149, 87, 108),
+        "pink_terracotta": (191, 103, 102),
+        "brown_terracotta": (77, 51, 35),
+
+        # Natural Blocks
+        "sandstone": (237, 201, 175),
+        "smooth_sandstone": (240, 228, 197),
+        "red_sandstone": (192, 102, 36),
+        "stone": (125, 125, 125),
+        "cobblestone": (113, 113, 113),
+        "mossy_cobblestone": (100, 117, 100),
+        "andesite": (136, 136, 136),
+        "diorite": (188, 188, 188),
+        "granite": (151, 109, 77),
+        "grass_block": (127, 178, 56),
+        "dirt": (134, 96, 67),
+        "coarse_dirt": (120, 85, 60),
+        "podzol": (100, 75, 50),
+
+        # Wood Blocks
+        "oak_planks": (162, 130, 78),
+        "spruce_planks": (116, 85, 59),
+        "birch_planks": (193, 174, 127),
+        "jungle_planks": (154, 111, 77),
+        "acacia_planks": (167, 92, 51),
+        "dark_oak_planks": (102, 78, 52),
+
+        # Other Blocks
+        "netherrack": (99, 36, 36),
+        "nether_bricks": (46, 23, 28),
+        "red_nether_bricks": (95, 18, 22),
+        "end_stone": (219, 219, 164),
+        "purpur_block": (170, 126, 170),
+        "obsidian": (25, 9, 43),
+        "glowstone": (249, 220, 92),
+        "sea_lantern": (172, 217, 211),
+        "prismarine": (99, 163, 140),
+        "dark_prismarine": (50, 92, 82),
+        "prismarine_bricks": (57, 180, 175),
+    }
 
     return min(MINECRAFT_BLOCKS, key=lambda block: euclidean_distance(rgb, MINECRAFT_BLOCKS[block]))
 
