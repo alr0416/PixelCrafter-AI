@@ -4,7 +4,7 @@ import time
 import requests
 from openai import OpenAI
 from dotenv import load_dotenv
-from PIL import Image
+from PIL import Image, ImageOps
 import numpy as np
 import tkinter as tk
 from PIL import Image, ImageTk
@@ -45,6 +45,7 @@ def start_loading_animation():
     threading.Thread(target=animate, daemon=True).start()
 
 def setup_gui():
+    """Sets up the graphical user interface (GUI) for the AI image generator."""
     global root, image_label, response_field, download_button, proceed_button, submit_button, entry
 
     root = tk.Tk()
@@ -54,7 +55,7 @@ def setup_gui():
 
     # Close Button (Escape full screen)
     close_button = tk.Button(root, text="Exit", font=("Arial", 12, "bold"), bg="red", fg="white",
-                             padx=15, pady=5, borderwidth=3, command=root.destroy)
+                             padx=15, pady=5, borderwidth=3, command=root.destroy, cursor="hand2")
     close_button.pack(pady=10, anchor="ne", padx=20)
 
     # Label
@@ -63,13 +64,13 @@ def setup_gui():
     label.pack(pady=10)
 
     # Textbox (Entry Widget)
-    entry = tk.Entry(root, width=70, font=("Arial", 14))
+    entry = tk.Entry(root, width=70, font=("Arial", 14), cursor="xterm")
     entry.pack(pady=10, ipady=8)
 
     # Submit Button (Modern Styling)
     submit_button = tk.Button(root, text="Generate Image", font=("Arial", 14, "bold"),
                               bg="#7289DA", fg="white", padx=25, pady=10, borderwidth=3,
-                              relief="ridge", command=capture_input)
+                              relief="ridge", command=capture_input, cursor="hand2")
     submit_button.pack(pady=15)
 
     # Response Output Field (For Error Messages)
@@ -83,14 +84,14 @@ def setup_gui():
     image_label.pack(pady=10)
 
     # Confirmation Buttons (Initially Hidden)
-    button_style = {"font": ("Arial", 14, "bold"), "padx": 25, "pady": 10, "borderwidth": 3, "relief": "ridge"}
+    button_style = {"font": ("Arial", 14, "bold"), "padx": 25, "pady": 10, "borderwidth": 3, "relief": "ridge", "cursor": "hand2"}
 
     proceed_button = tk.Button(root, text="Proceed", bg="green", fg="white",
                                command=proceed_with_conversion, **button_style)
     proceed_button.pack(pady=10)
     proceed_button.pack_forget()
 
-    # Download Button (Initially Hidden)
+    # Download Button (Never Disabled)
     download_button = tk.Button(root, text="Download Image", bg="#43B581", fg="white",
                                 command=download_image, **button_style)
     download_button.pack(pady=10)
@@ -147,7 +148,6 @@ def display_image_from_url(image_url):
 
         # Enable and show Proceed + Download buttons
         proceed_button.config(state=tk.NORMAL)
-        download_button.config(state=tk.NORMAL)
         proceed_button.pack()
         download_button.pack()
 
@@ -159,30 +159,41 @@ def display_image_from_url(image_url):
         response_field.config(text="Failed to display image.", fg="red")
 
 def proceed_with_conversion():
-    """Proceeds with converting the image into Minecraft blocks."""
-    image_path = "ai_image.png"
-    pixels = process_image(image_path)
+    """Downloads the generated image into the project folder before processing it."""
+    image_url = getattr(download_button, "image_url", None)
+    if not image_url:
+        response_field.config(text="No image to process!", fg="red")
+        return
 
-    if pixels is not None:
-        print(f"Image processed with shape: {pixels.shape}")
+    try:
+        response = requests.get(image_url)
+        response.raise_for_status()
 
-        # **Disable buttons after proceeding**
-        proceed_button.config(state=tk.DISABLED)
-        download_button.config(state=tk.DISABLED)
+        # Save image in project folder as "ai_image.png"
+        save_path = "ai_image.png"
+        with open(save_path, "wb") as f:
+            f.write(response.content)
 
-        # Convert pixels to Minecraft blocks
-        block_grid = convert_pixels_to_blocks(pixels)
+        response_field.config(text="Image saved in project folder! Proceeding with conversion...", fg="green")
+        print(f"Image saved to: {save_path}")
 
-        # Generate and save .mcfunction file
-        generate_mcfunction(block_grid)
+        # Process image for Minecraft conversion
+        pixels = process_image(save_path)
+        print(pixels.shape)
 
-        response_field.config(text="Minecraft function file generated! Run in-game with:\n/reload\n/function build_structure", fg="green")
+        if pixels is not None:
+            block_grid = convert_pixels_to_blocks(pixels)
+            generate_mcfunction(block_grid)
+            response_field.config(text="Minecraft function file generated!\nUse /reload and /function build_structure in-game.", fg="green")
+        else:
+            response_field.config(text="Image processing failed.", fg="red")
 
-    else:
-        response_field.config(text="Image processing failed.", fg="red")
+    except Exception as e:
+        response_field.config(text=f"Error saving image: {e}", fg="red")
+
 
 def download_image():
-    """Downloads the generated image when the user clicks the download button."""
+    """Saves the generated image into the user's Downloads folder."""
     image_url = getattr(download_button, "image_url", None)
     if not image_url:
         response_field.config(text="No image to download!", fg="red")
@@ -192,31 +203,54 @@ def download_image():
         response = requests.get(image_url)
         response.raise_for_status()
 
-        save_path = "ai_image.png"
+        # Save to user's Downloads folder
+        downloads_folder = os.path.join(os.path.expanduser("~"), "Downloads")
+        save_path = os.path.join(downloads_folder, "ai_image.png")
+
         with open(save_path, "wb") as f:
             f.write(response.content)
 
-        response_field.config(text="Image downloaded successfully!", fg="green")
+        response_field.config(text="Image downloaded to your Downloads folder!", fg="green")
         print(f"Image saved to: {save_path}")
-
-        # **Disable download button after clicking**
-        download_button.config(state=tk.DISABLED)
 
     except Exception as e:
         response_field.config(text=f"Error downloading image: {e}", fg="red")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def process_image(image_path, size=(256, 256)):
-    """Resizes and converts an image to an RGB pixel array."""
+    """Resizes an image to a square while preserving aspect ratio and converting it to an RGB pixel array."""
     try:
         image = Image.open(image_path).convert("RGB")
-        image = image.resize(size)
+
+        # Ensure the image is square by padding
+        image = ImageOps.pad(image, size, method=Image.Resampling.LANCZOS)
+
         return np.array(image)  # RGB Pixel Array
 
     except Exception as e:
         print(f"Error processing image: {e}")
         return None
-
-
 
 
 
