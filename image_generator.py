@@ -1,4 +1,3 @@
-import os
 import threading
 import time
 import requests
@@ -12,12 +11,8 @@ import subprocess
 import os
 import json
 
-
-
 # Load environment variables
 load_dotenv()
-
-
 
 
 def open_minecraft():
@@ -27,7 +22,6 @@ def open_minecraft():
         subprocess.Popen(minecraft_path)  # Open the launcher
     except Exception as e:
         print(f"Error opening Minecraft: {e}")
-
 
 
 def create_function_directory():
@@ -76,10 +70,7 @@ def create_function_directory():
     print(f"Set MINECRAFT_FUNCTION_PATH to: {function_directory}")
 
 
-
-
 def capture_input():
-
     """Handles the image generation process when the user submits a prompt."""
     user_input = entry.get()
     print(f"User Input: {user_input}")
@@ -98,8 +89,10 @@ def capture_input():
     # Run image generation in a separate thread to keep the UI responsive
     threading.Thread(target=generate_image, args=(user_input,), daemon=True).start()
 
+
 def start_loading_animation():
     """Displays an animated '...' while the image is being generated."""
+
     def animate():
         dots = ["", ".", "..", "..."]
         i = 0
@@ -112,11 +105,10 @@ def start_loading_animation():
     loading = True
     threading.Thread(target=animate, daemon=True).start()
 
+
 def setup_gui():
     """Sets up the graphical user interface (GUI) for the AI image generator."""
     global root, image_label, response_field, download_button, proceed_button, submit_button, entry, launch_button
-
-
 
     root = tk.Tk()
     root.title("AI Image Generator")
@@ -154,7 +146,8 @@ def setup_gui():
     image_label.pack(pady=10)
 
     # Confirmation Buttons (Initially Hidden)
-    button_style = {"font": ("Arial", 14, "bold"), "padx": 25, "pady": 10, "borderwidth": 3, "relief": "ridge", "cursor": "hand2"}
+    button_style = {"font": ("Arial", 14, "bold"), "padx": 25, "pady": 10, "borderwidth": 3, "relief": "ridge",
+                    "cursor": "hand2"}
 
     proceed_button = tk.Button(root, text="Proceed", bg="green", fg="white",
                                command=proceed_with_conversion, **button_style)
@@ -171,9 +164,9 @@ def setup_gui():
     launch_button.pack(pady=20)
     launch_button.pack_forget()
 
-
     # Run the GUI
     root.mainloop()
+
 
 def generate_image(user_input):
     """Generates an image using OpenAI's DALL·E and displays it, but does NOT download."""
@@ -238,11 +231,11 @@ def display_image_from_url(image_url):
         print(f"Error displaying image: {e}")
         response_field.config(text="Failed to display image.", fg="red")
 
+
 def proceed_with_conversion():
     """Downloads the generated image into the project folder before processing it."""
+
     image_url = getattr(download_button, "image_url", None)
-
-
 
     if not image_url:
         response_field.config(text="No image to process!", fg="red")
@@ -263,11 +256,12 @@ def proceed_with_conversion():
         # Process image for Minecraft conversion
         pixels = process_image(save_path)
 
-
         if pixels is not None:
             block_grid = convert_pixels_to_blocks(pixels)
             generate_mcfunction(block_grid)
-            response_field.config(text="Minecraft function file generated!\nUse /reload and /function build_structure in-game.", fg="green")
+            response_field.config(
+                text="Minecraft function file generated!\nUse /reload and /function build_structure in-game.",
+                fg="green")
 
             # Add a button to open Minecraft
             launch_button.pack()
@@ -304,27 +298,6 @@ def download_image():
         response_field.config(text=f"Error downloading image: {e}", fg="red")
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def process_image(image_path, size=(256, 256)):
     """Resizes an image to a square while preserving aspect ratio and converting it to an RGB pixel array."""
     try:
@@ -338,15 +311,6 @@ def process_image(image_path, size=(256, 256)):
     except Exception as e:
         print(f"Error processing image: {e}")
         return None
-
-
-
-
-
-
-
-
-
 
 
 def euclidean_distance(color1, color2):
@@ -452,6 +416,7 @@ def closest_minecraft_block(rgb):
 
     return min(MINECRAFT_BLOCKS, key=lambda block: euclidean_distance(rgb, MINECRAFT_BLOCKS[block]))
 
+
 def convert_pixels_to_blocks(pixel_array):
     """Converts an RGB pixel array into a Minecraft block grid."""
     height, width, _ = pixel_array.shape
@@ -465,8 +430,7 @@ def convert_pixels_to_blocks(pixel_array):
             row.append(block_name)
         block_grid.append(row)
 
-    return block_grid #an array of provided block names
-
+    return block_grid  # an array of provided block names
 
 
 # Define the path where the .mcfunction file should be saved
@@ -504,21 +468,11 @@ def generate_mcfunction(block_grid):
         print(f"Error writing .mcfunction file: {e}")
 
 
-
-
-
-
-
-
-
 def main():
     """Main function to generate, process, and convert the image into a Minecraft build."""
 
-
     create_function_directory()
     setup_gui()
-
-
 
 
 if __name__ == "__main__":
