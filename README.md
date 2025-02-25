@@ -50,3 +50,6 @@ This will install all required packages automatically.
 
 ###### Note: If you're using a different method to manage dependencies, you may need to manually install required packages.
 <br>
+
+#### This project was tested using Minecraft Java 1.21.4
+<br>
