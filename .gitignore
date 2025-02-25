@@ -1,0 +1,60 @@
+# Byte-compiled / Cached files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.env
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Pipenv files (if you want to ignore the lock file)
+Pipfile.lock
+
+# IDE / Editor settings
+.idea/
+.vscode/
+*.sublime-workspace
+
+# Logs and temp files
+logs/
+*.log
+*.tmp
+*.swp
+.DS_Store
+
+# Image files (if they are generated and not source images)
+ai_image.png
+*.jpg
+*.jpeg
+*.png
+
+# Minecraft datapack compiled files (if needed)
+datapacks/
+*.mcfunction
+
+# Tkinter and GUI cache
+*.tcl
+*.ttk
+
+# Ignore downloaded models or API cache (if applicable)
+models/
+cache/
+
+# Ignore unnecessary OS files
+Thumbs.db
+desktop.ini
+
+# Ignore build artifacts (if using PyInstaller)
+build/
+dist/
+*.spec
+
+# Ignore Python test results
+.coverage
+.tox/
+pytest_cache/
+nosetests.xml
+junit.xml
